@@ -1,0 +1,22 @@
+# Python 3.10 or 3.11 (basic-pitch on Windows)
+# basic-pitch itself is installed with --no-deps (see README) so it runs on
+# ONNX Runtime instead of pulling in a 300 MB TensorFlow. These are its deps:
+onnxruntime
+numpy
+mir_eval
+resampy
+scikit-learn
+scipy
+# Stages 1-3, 6, 7
+librosa
+soundfile>=0.12
+noisereduce
+pretty_midi
+pyloudnorm
+matplotlib
+gradio>=4
+pytest
+
+# Stage 5: generation (install on a GPU machine / Colab / HF Space)
+torch
+transformers>=4.40

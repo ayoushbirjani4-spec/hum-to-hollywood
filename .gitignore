@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Private training audio and generated output: never commit
+data/*
+!data/.gitkeep
+!data/labels_template.csv
+outputs/
+
+# Model caches
+.cache/
+*.ckpt
+*.safetensors
+
+.ipynb_checkpoints/
+.gradio/

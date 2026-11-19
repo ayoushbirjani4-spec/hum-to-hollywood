@@ -1,0 +1,2 @@
+file,genre,instruments,mood,bpm,key,description,split
+film_score/clip_0001.wav,film score,strings and brass,tense,120,D minor,"epic orchestral film score, strings and brass, tense, 120 bpm, D minor",train
