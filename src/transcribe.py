@@ -32,9 +32,16 @@ _model = None
 def _get_model():
     global _model
     if _model is None:
-        from basic_pitch import ICASSP_2022_MODEL_PATH
+        from basic_pitch import ICASSP_2022_MODEL_PATH, FilenameSuffix, build_icassp_2022_model_path
         from basic_pitch.inference import Model
-        _model = Model(ICASSP_2022_MODEL_PATH)
+        # Prefer ONNX: basic-pitch otherwise picks TensorFlow whenever it is installed
+        # (e.g. on Colab), and newer TensorFlow versions can't load its old saved model.
+        try:
+            import onnxruntime  # noqa: F401
+            path = build_icassp_2022_model_path(FilenameSuffix.onnx)
+        except ImportError:
+            path = ICASSP_2022_MODEL_PATH
+        _model = Model(path)
     return _model
 
 
