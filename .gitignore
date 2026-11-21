@@ -17,3 +17,9 @@ outputs/
 
 .ipynb_checkpoints/
 .gradio/
+
+# graphify: keep the graph and report, ignore cache and build state
+graphify-out/*
+!graphify-out/graph.json
+!graphify-out/graph.html
+!graphify-out/GRAPH_REPORT.md
