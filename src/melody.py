@@ -224,8 +224,33 @@ def to_midi(melody: CleanMelody, path: str, program: int = 73) -> str:
     return path
 
 
+def loop_notes(notes: list[Note], bpm: float, duration: float, beats_per_bar: int = 4) -> list[Note]:
+    """Repeat the melody, in whole bars, until it covers `duration` seconds.
+
+    MusicGen only follows the melody for as long as the guide lasts; a 7 s hum
+    guiding a 15 s track leaves the second half unguided.
+    """
+    if not notes:
+        return []
+    bar = 60.0 / bpm * beats_per_bar
+    phrase = max(bar, np.ceil(notes[-1].end / bar - 1e-6) * bar)  # round up to whole bars
+    out: list[Note] = []
+    offset = 0.0
+    while offset < duration:
+        out.extend(Note(n.pitch, n.start + offset, n.end + offset, n.velocity)
+                   for n in notes if n.start + offset < duration)
+        offset += phrase
+    return out
+
+
+# Octave harmonics only (1, 2, 4 x f0): they all map to the same pitch class, so
+# MusicGen's chromagram sees a clean single note. A 3rd harmonic would add a
+# phantom fifth above every note.
+_GUIDE_HARMONICS = ((1, 1.0), (2, 0.5), (4, 0.25))
+
+
 def render_guide(notes: list[Note], sr: int = 32000, tail: float = 0.5) -> np.ndarray:
-    """Synthesize a clean guide track (soft additive tone) for MusicGen's melody conditioning."""
+    """Synthesize a clean guide track for MusicGen's melody conditioning."""
     if not notes:
         return np.zeros(sr, dtype=np.float32)
     total = int((notes[-1].end + tail) * sr)
@@ -234,7 +259,7 @@ def render_guide(notes: list[Note], sr: int = 32000, tail: float = 0.5) -> np.nd
         f0 = 440.0 * 2 ** ((n.pitch - 69) / 12)
         s, e = int(n.start * sr), int(n.end * sr)
         t = np.arange(e - s) / sr
-        tone = sum(np.sin(2 * np.pi * f0 * k * t) / k for k in range(1, 5))
+        tone = sum(a * np.sin(2 * np.pi * f0 * k * t) for k, a in _GUIDE_HARMONICS)
         env = np.ones_like(t)
         a, r = min(int(0.01 * sr), t.size // 4), min(int(0.06 * sr), t.size // 3)
         if a:

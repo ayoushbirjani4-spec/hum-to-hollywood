@@ -1,7 +1,7 @@
 import numpy as np
 
-from src.melody import (Key, clean_melody, detect_key, make_monophonic, merge_wobbles, quantize,
-                        remove_strays, render_guide, snap_to_key)
+from src.melody import (Key, clean_melody, detect_key, loop_notes, make_monophonic, merge_wobbles,
+                        quantize, remove_strays, render_guide, snap_to_key)
 from src.transcribe import Note
 
 
@@ -69,6 +69,22 @@ def test_clean_melody_end_to_end_on_notes():
     m = clean_melody(raw, bpm=120)
     assert [n.pitch for n in m.notes] == [60, 62, 64, 65, 67, 65, 64, 62, 60]
     assert m.key.name == "C major"
+
+
+def test_loop_notes_fills_duration_in_whole_bars():
+    notes = seq([60, 62, 64], dur=0.5)          # 1.5 s phrase at 120 bpm -> one 2 s bar
+    looped = loop_notes(notes, bpm=120, duration=7)
+    starts = [n.start for n in looped if n.pitch == 60]
+    assert starts == [0.0, 2.0, 4.0, 6.0]
+    assert all(n.start < 7 for n in looped)
+
+
+def test_guide_chroma_has_no_phantom_fifth():
+    import librosa
+    y = render_guide([Note(60, 0, 2, 100)], sr=22050)   # a single C
+    chroma = librosa.feature.chroma_stft(y=y, sr=22050).mean(axis=1)
+    assert chroma.argmax() == 0                    # C
+    assert chroma[7] < 0.3 * chroma[0]             # G (the fifth) stays weak
 
 
 def test_render_guide_length_and_range():

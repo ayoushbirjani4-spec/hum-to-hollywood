@@ -49,7 +49,8 @@ def run(y: np.ndarray, sr: int = audio_in.SR, style: str = "Epic film score", ex
     t["melody"] = time.perf_counter() - t0
 
     files = {"midi": melody.to_midi(clean, f"{stem}_melody.mid")}
-    guide = melody.render_guide(clean.notes, sr=generate.SAMPLE_RATE)
+    # guide covers the whole track so MusicGen follows the tune from start to end
+    guide = melody.render_guide(melody.loop_notes(clean.notes, clean.bpm, duration), sr=generate.SAMPLE_RATE)
     files["guide_wav"] = audio_in.save_wav(f"{stem}_guide.wav", guide, generate.SAMPLE_RATE)
     fig = melody.piano_roll(raw, clean)
     files["piano_roll"] = f"{stem}_pianoroll.png"
