@@ -15,7 +15,11 @@ def normalize_loudness(y: np.ndarray, sr: int, target: float = TARGET_LUFS) -> n
     loud = meter.integrated_loudness(y)
     if not np.isfinite(loud):
         return y
-    y = pyln.normalize.loudness(y, loud, target)
+    import warnings
+    with warnings.catch_warnings():
+        # pyloudnorm warns when the gain pushes peaks past 1.0; the peak scaling below handles that
+        warnings.filterwarnings("ignore", message="Possible clipped samples")
+        y = pyln.normalize.loudness(y, loud, target)
     peak = np.max(np.abs(y))
     return y / peak * 0.98 if peak > 0.98 else y  # simple peak safety
 

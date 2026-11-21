@@ -7,6 +7,7 @@ import noisereduce as nr
 import soundfile as sf
 
 SR = 22050  # Basic Pitch works at 22.05 kHz
+MAX_SECONDS = 30  # longer hums only cost memory; MusicGen follows ~30 s at most
 
 
 def load_audio(path: str, sr: int = SR) -> np.ndarray:
@@ -33,6 +34,7 @@ def clean_audio(y: np.ndarray, sr: int = SR, denoise: bool = True, top_db: float
     if y.size == 0:
         raise ValueError("Audio is empty.")
     y, _ = librosa.effects.trim(y, top_db=top_db)
+    y = y[: MAX_SECONDS * sr]
     if denoise and y.size > sr // 2:
         # stationary=True is gentle and fast; prop_decrease < 1 keeps the voice natural
         y = nr.reduce_noise(y=y, sr=sr, stationary=True, prop_decrease=0.75)
