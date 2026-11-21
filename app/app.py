@@ -11,6 +11,10 @@ import gradio as gr
 
 from src import audio_in, generate, pipeline, prompts
 
+MOCK_NOTE = ("⚠️ **Placeholder mode (no GPU):** the track is your cleaned melody over a fixed beat, "
+             "so every style sounds the same. The melody, key, tempo and prompt are real. "
+             "For real AI music in your chosen style, run on a GPU (see the Colab notebook in the README).")
+
 
 def on_generate(audio, style, extra, duration, bpm, hum_level, seed):
     if audio is None:
@@ -23,13 +27,17 @@ def on_generate(audio, style, extra, duration, bpm, hum_level, seed):
         raise gr.Error(str(e))
     info = (f"**{r.key} · {r.bpm:.0f} bpm** · {r.n_raw_notes} raw notes cleaned to {r.n_notes}\n\n"
             f"Prompt: *{r.prompt}*\n\n"
-            f"Backend: `{r.backend}`" + (" (placeholder audio, no GPU. See README)" if r.backend == "mock" else ""))
+            f"Backend: `{r.backend}`")
+    if r.backend == "mock":
+        info = (MOCK_NOTE + "\n\n" + info)
     downloads = [r.files[k] for k in ("track_wav", "track_mp3", "midi") if k in r.files]
     return r.files["track_wav"], r.files["piano_roll"], r.files["guide_wav"], info, downloads
 
 
 with gr.Blocks(title="Hum to Hollywood") as demo:
     gr.Markdown("# Hum to Hollywood\nHum a melody, pick a style, get a full arranged track built around your tune.")
+    if generate.backend() == "mock":
+        gr.Markdown(MOCK_NOTE)
     with gr.Row():
         with gr.Column():
             audio = gr.Audio(sources=["microphone", "upload"], type="numpy", label="Your hum (5-15 seconds works best)")
