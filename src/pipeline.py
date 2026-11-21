@@ -41,7 +41,9 @@ def hum_to_melody(y: np.ndarray, sr: int = audio_in.SR, bpm: float | None = None
 def run(y: np.ndarray, sr: int = audio_in.SR, style: str = "Epic film score", extra: str = "",
         duration: float = 15.0, bpm: float | None = None, hum_level: float = 0.0,
         seed: int | None = None, guidance_scale: float = 3.0, model: str | None = None,
-        out_dir: str = OUT_DIR) -> Result:
+        keep_voice: bool = False, out_dir: str = OUT_DIR) -> Result:
+    """keep_voice=True: your singing stays in the song and the music is built around it.
+    The track then lasts as long as your singing (up to 30 s) and `duration` is ignored."""
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.join(out_dir, time.strftime("%Y%m%d-%H%M%S"))
     t = {}
@@ -51,8 +53,16 @@ def run(y: np.ndarray, sr: int = audio_in.SR, style: str = "Epic film score", ex
     t["melody"] = time.perf_counter() - t0
 
     files = {"midi": melody.to_midi(clean, f"{stem}_melody.mid")}
-    # guide covers the whole track so MusicGen follows the tune from start to end
-    guide = melody.render_guide(melody.loop_notes(clean.notes, clean.bpm, duration), sr=generate.SAMPLE_RATE)
+    gsr = generate.SAMPLE_RATE
+    if keep_voice:
+        # guide at the exact times you sang, so the music lines up with your voice
+        timed = melody.clean_melody(raw, hum, sr, bpm=clean.bpm, keep_timing=True).notes
+        duration = min(hum.size / sr, generate.MAX_SECONDS)
+        guide = melody.render_guide(timed, sr=gsr, tail=0.0)
+        guide = np.pad(guide, (0, max(0, int(duration * gsr) - guide.size)))[: int(duration * gsr)]
+    else:
+        # guide covers the whole track so MusicGen follows the tune from start to end
+        guide = melody.render_guide(melody.loop_notes(clean.notes, clean.bpm, duration), sr=gsr)
     files["guide_wav"] = audio_in.save_wav(f"{stem}_guide.wav", guide, generate.SAMPLE_RATE)
     fig = melody.piano_roll(raw, clean)
     files["piano_roll"] = f"{stem}_pianoroll.png"
@@ -68,6 +78,9 @@ def run(y: np.ndarray, sr: int = audio_in.SR, style: str = "Epic film score", ex
     t["generate"] = time.perf_counter() - t0
     match = evaluate.melody_match(guide, track, track_sr)  # before mixing the hum back in
 
+    if keep_voice:
+        track = postprocess.mix_vocal(track, track_sr, hum, sr, lag=match.lag)
+        hum_level = 0.0
     track = postprocess.finish(track, track_sr, hum, sr, hum_level)
     for fmt, path in postprocess.export(track, track_sr, f"{stem}_track").items():
         files[f"track_{fmt}"] = path
@@ -88,11 +101,13 @@ def main():
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--guidance", type=float, default=3.0, help="follow strength, 1-8 (default 3)")
     ap.add_argument("--large", action="store_true", help="use musicgen-melody-large (3.3B)")
+    ap.add_argument("--keep-voice", action="store_true", help="keep your singing in the song, music built around it")
     a = ap.parse_args()
 
     y = audio_in.load_audio(a.audio)
     r = run(y, style=a.style, extra=a.extra, duration=a.duration, bpm=a.bpm, hum_level=a.hum_level, seed=a.seed,
-            guidance_scale=a.guidance, model="facebook/musicgen-melody-large" if a.large else None)
+            guidance_scale=a.guidance, model="facebook/musicgen-melody-large" if a.large else None,
+            keep_voice=a.keep_voice)
     print(f"backend : {r.backend}")
     if r.tune_match:
         print(f"tune    : {r.tune_match.score:.0%} match (ignoring the tune would score ~{r.tune_match.baseline:.0%})")

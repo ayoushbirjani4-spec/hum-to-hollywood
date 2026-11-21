@@ -191,7 +191,12 @@ def quantize(notes: list[Note], bpm: float, division: int = 4) -> list[Note]:
 # ---------- full clean-up ----------
 
 def clean_melody(raw: list[Note], y: np.ndarray | None = None, sr: int = 22050,
-                 bpm: float | None = None, snap: bool = True, quantise: bool = True) -> CleanMelody:
+                 bpm: float | None = None, snap: bool = True, quantise: bool = True,
+                 keep_timing: bool = False) -> CleanMelody:
+    """keep_timing=True leaves notes exactly where they were sung (no grid, no shift
+    to t=0), so a guide built from them lines up with the singer's own voice."""
+    if keep_timing:
+        quantise = False
     onsets = detect_onsets(y, sr) if y is not None else None
     notes = remove_strays(raw)
     notes = make_monophonic(notes)
@@ -204,7 +209,7 @@ def clean_melody(raw: list[Note], y: np.ndarray | None = None, sr: int = 22050,
     bpm = bpm or estimate_tempo(notes, y, sr)
     if quantise:
         notes = quantize(notes, bpm)
-    else:
+    elif not keep_timing:
         t0 = notes[0].start
         notes = [Note(n.pitch, n.start - t0, n.end - t0, n.velocity) for n in notes]
     return CleanMelody(notes=notes, key=key, bpm=bpm)

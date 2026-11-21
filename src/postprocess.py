@@ -47,6 +47,38 @@ def mix_hum(track: np.ndarray, sr: int, hum: np.ndarray, hum_sr: int, level: flo
     return out
 
 
+def mix_vocal(backing: np.ndarray, sr: int, vocal: np.ndarray, vocal_sr: int,
+              lag: float = 0.0, vocal_level: float = 1.3, reverb: float = 0.18) -> np.ndarray:
+    """Put the singer's own voice back on top of the generated music.
+
+    - shift the voice by `lag` (how late the music came in vs the guide)
+    - high-pass at 90 Hz to drop mic rumble and plosives
+    - balance: voice RMS = `vocal_level` x music RMS, so it leads without drowning it
+    - a short synthetic room reverb so the voice sits in the track instead of on top
+    """
+    import librosa
+    from scipy.signal import butter, fftconvolve, sosfilt
+
+    if vocal_sr != sr:
+        vocal = librosa.resample(vocal, orig_sr=vocal_sr, target_sr=sr)
+    vocal = sosfilt(butter(4, 90, btype="highpass", fs=sr, output="sos"), vocal).astype(np.float32)
+    vocal = np.concatenate([np.zeros(int(lag * sr), dtype=np.float32), vocal])[: backing.size]
+
+    t = np.arange(int(1.2 * sr)) / sr
+    ir = np.random.default_rng(0).standard_normal(t.size) * np.exp(-t / 0.35)
+    ir[: int(0.012 * sr)] = 0  # ~12 ms pre-delay keeps the dry voice clear
+    wet = fftconvolve(vocal, ir)[: vocal.size]
+    wet *= np.sqrt(np.mean(vocal ** 2)) / (np.sqrt(np.mean(wet ** 2)) + 1e-9)
+    vocal = (1 - reverb) * vocal + reverb * wet
+
+    active = np.abs(vocal) > 0.02 * (np.abs(vocal).max() + 1e-9)  # balance on the sung parts only
+    rms_v = np.sqrt(np.mean(vocal[active] ** 2)) + 1e-9 if active.any() else 1.0
+    rms_b = np.sqrt(np.mean(backing ** 2)) + 1e-9
+    out = backing.copy()
+    out[: vocal.size] += vocal * (rms_b / rms_v) * vocal_level
+    return out
+
+
 def finish(y: np.ndarray, sr: int, hum: np.ndarray | None = None, hum_sr: int | None = None,
            hum_level: float = 0.0) -> np.ndarray:
     if hum is not None and hum_level > 0:

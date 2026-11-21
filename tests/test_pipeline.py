@@ -40,6 +40,19 @@ def test_transcription_recovers_melody(melody_result):
     assert clean.key.name == "C major"
 
 
+def test_keep_voice_song_lasts_as_long_as_the_singing(tmp_path):
+    import soundfile as sf
+    hum = fake_hum(MELODY[:6])
+    with_voice = pipeline.run(hum, SR, style="Pop", duration=25, keep_voice=True, out_dir=str(tmp_path / "v"))
+    without = pipeline.run(hum, SR, style="Pop", duration=25, keep_voice=False, out_dir=str(tmp_path / "n"))
+    a, sr_a = sf.read(with_voice.files["track_wav"])
+    b, sr_b = sf.read(without.files["track_wav"])
+    from src import audio_in
+    sung = audio_in.clean_audio(hum, SR).size / SR  # the cleaned recording the song is built on
+    assert abs(a.size / sr_a - sung) < 0.05         # song length follows the singing, not the 25 s slider
+    assert abs(b.size / sr_b - 25) < 0.1
+
+
 def test_full_run_writes_files(tmp_path):
     r = pipeline.run(fake_hum(MELODY[:6]), SR, style="Pop", duration=4, out_dir=str(tmp_path))
     for k in ("track_wav", "midi", "guide_wav", "piano_roll"):

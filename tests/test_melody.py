@@ -87,6 +87,12 @@ def test_guide_chroma_has_no_phantom_fifth():
     assert chroma[7] < 0.3 * chroma[0]             # G (the fifth) stays weak
 
 
+def test_keep_timing_leaves_notes_where_sung():
+    raw = [Note(60, 1.03, 1.49, 90), Note(64, 1.52, 2.11, 90), Note(67, 2.17, 2.9, 90)]
+    m = clean_melody(raw, bpm=120, keep_timing=True)
+    assert [(n.start, n.end) for n in m.notes] == [(1.03, 1.49), (1.52, 2.11), (2.17, 2.9)]
+
+
 def test_render_guide_length_and_range():
     y = render_guide(seq([60, 64, 67]), sr=16000)
     assert y.size > 16000 and abs(y).max() <= 0.81
