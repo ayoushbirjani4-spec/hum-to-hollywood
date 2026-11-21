@@ -16,16 +16,20 @@ MOCK_NOTE = ("⚠️ **Placeholder mode (no GPU):** the track is your cleaned me
              "For real AI music in your chosen style, run on a GPU (see the Colab notebook in the README).")
 
 
-def on_generate(audio, style, extra, duration, bpm, hum_level, seed):
+def on_generate(audio, style, extra, duration, bpm, hum_level, seed, guidance, model):
     if audio is None:
         raise gr.Error("Record or upload a hum first.")
     y = audio_in.from_gradio(audio)
     try:
         r = pipeline.run(y, style=style, extra=extra or "", duration=duration,
-                         bpm=bpm or None, hum_level=hum_level, seed=int(seed) if seed else None)
+                         bpm=bpm or None, hum_level=hum_level, seed=int(seed) if seed else None,
+                         guidance_scale=guidance, model=model)
     except ValueError as e:
         raise gr.Error(str(e))
-    info = (f"**{r.key} · {r.bpm:.0f} bpm** · {r.n_raw_notes} raw notes cleaned to {r.n_notes}\n\n"
+    m = r.tune_match
+    tune = (f"**Tune match: {m.score:.0%}** (a track that ignored your tune would score about {m.baseline:.0%})\n\n"
+            if m else "")
+    info = (tune + f"**{r.key} · {r.bpm:.0f} bpm** · {r.n_raw_notes} raw notes cleaned to {r.n_notes}\n\n"
             f"Prompt: *{r.prompt}*\n\n"
             f"Backend: `{r.backend}`")
     if r.backend == "mock":
@@ -48,6 +52,10 @@ with gr.Blocks(title="Hum to Hollywood") as demo:
                 bpm = gr.Number(value=0, label="Tempo override (0 = detect)")
                 hum_level = gr.Slider(0, 1, value=0, step=0.05, label="Mix your hum on top")
                 seed = gr.Number(value=0, label="Seed (0 = random)", precision=0)
+                guidance = gr.Slider(1, 8, value=3, step=0.5,
+                                     label="Follow strength (higher sticks closer to your tune and style; above ~6 can sound harsh)")
+                model = gr.Radio(list(generate.MODELS), value=list(generate.MODELS)[0],
+                                 label="Model (Large is a one-time ~10.5 GB download and slower)")
             btn = gr.Button("Generate", variant="primary")
         with gr.Column():
             track = gr.Audio(label="Your track", type="filepath")
@@ -55,7 +63,8 @@ with gr.Blocks(title="Hum to Hollywood") as demo:
             roll = gr.Image(label="Detected melody", type="filepath")
             guide = gr.Audio(label="Cleaned melody (guide)", type="filepath")
             files = gr.File(label="Downloads", file_count="multiple")
-    btn.click(on_generate, [audio, style, extra, duration, bpm, hum_level, seed], [track, roll, guide, info, files])
+    btn.click(on_generate, [audio, style, extra, duration, bpm, hum_level, seed, guidance, model],
+              [track, roll, guide, info, files])
     gr.Markdown(f"Generation backend: `{generate.backend()}`. MusicGen weights are CC-BY-NC: non-commercial use only.")
 
 

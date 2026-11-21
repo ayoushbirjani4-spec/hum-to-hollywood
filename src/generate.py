@@ -15,13 +15,18 @@ import os
 
 import numpy as np
 
-MODEL_ID = os.environ.get("HTH_MODEL", "facebook/musicgen-melody")
+MODELS = {
+    "Standard (1.5B, faster)": "facebook/musicgen-melody",        # ~6 GB download
+    "Large (3.3B, follows tune better)": "facebook/musicgen-melody-large",  # ~10.5 GB download
+}
+MODEL_ID = os.environ.get("HTH_MODEL", MODELS["Standard (1.5B, faster)"])
 SAMPLE_RATE = 32000
 TOKENS_PER_SECOND = 50
 MAX_SECONDS = 30
 
 _model = None
 _processor = None
+_loaded_id = None
 
 
 def backend() -> str:
@@ -35,29 +40,42 @@ def backend() -> str:
         return "mock"
 
 
-def _load():
-    global _model, _processor
-    if _model is None:
+def _load(model_id: str = MODEL_ID):
+    """Load a model, keeping only one in GPU memory at a time."""
+    global _model, _processor, _loaded_id
+    if _loaded_id != model_id:
+        import gc
         import torch
         from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
+        _model = _processor = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
-        _processor = AutoProcessor.from_pretrained(MODEL_ID)
-        _model = MusicgenMelodyForConditionalGeneration.from_pretrained(MODEL_ID, torch_dtype=dtype).to(device)
+        _processor = AutoProcessor.from_pretrained(model_id)
+        _model = MusicgenMelodyForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=dtype, low_cpu_mem_usage=True).to(device)
         _model.eval()
+        _loaded_id = model_id
     return _model, _processor
 
 
 def generate(prompt: str, guide: np.ndarray, sr: int = SAMPLE_RATE, duration: float = 15.0,
-             guidance_scale: float = 3.0, bpm: float = 100.0, seed: int | None = None) -> tuple[np.ndarray, int]:
-    """Return (audio mono float32, sample_rate) following `guide` in the style of `prompt`."""
+             guidance_scale: float = 3.0, bpm: float = 100.0, seed: int | None = None,
+             model_id: str | None = None) -> tuple[np.ndarray, int]:
+    """Return (audio mono float32, sample_rate) following `guide` in the style of `prompt`.
+
+    guidance_scale: classifier-free guidance. Higher sticks closer to the melody and
+    the prompt; too high (> ~6) starts to sound harsh and repetitive.
+    """
     duration = float(np.clip(duration, 2, MAX_SECONDS))
     if backend() == "mock":
         return _mock(guide, sr, duration, bpm), sr
 
     import torch
-    model, processor = _load()
+    model, processor = _load(MODELS.get(model_id, model_id) or MODEL_ID)
     if sr != SAMPLE_RATE:
         import librosa
         guide = librosa.resample(guide, orig_sr=sr, target_sr=SAMPLE_RATE)
